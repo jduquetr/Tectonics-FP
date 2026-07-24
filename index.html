@@ -1,0 +1,1117 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TectonicsWeb — análisis estructural en el navegador</title>
+<style>
+  :root{
+    --bg:#12161c; --panel:#1b212b; --panel2:#212934; --border:#2c3644;
+    --text:#e6e9ee; --muted:#93a1b3; --accent:#4fa3ff; --accent2:#ff8a4f;
+    --green:#4fdc9a; --red:#ff5f6d; --net:#3a4657;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f4f6f9; --panel:#ffffff; --panel2:#eef1f5; --border:#d7dde5;
+      --text:#1b232e; --muted:#5b6675; --accent:#1c6fe0; --accent2:#e0691c;
+      --green:#188a5c; --red:#c8323f; --net:#c3cbd6; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);}
+  header{display:flex;align-items:center;gap:.75rem;padding:.7rem 1rem;background:var(--panel);border-bottom:1px solid var(--border);}
+  header h1{font-size:1rem;margin:0;font-weight:600;}
+  header .sub{color:var(--muted);font-size:.78rem;}
+  nav{display:flex;gap:.25rem;padding:.5rem 1rem;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap;}
+  nav button{background:transparent;border:1px solid transparent;color:var(--muted);padding:.4rem .8rem;border-radius:.5rem;cursor:pointer;font-size:.85rem;}
+  nav button.active{background:var(--panel2);color:var(--text);border-color:var(--border);}
+  nav button:hover{color:var(--text);}
+  main{padding:1rem;max-width:1400px;margin:0 auto;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+  @media (max-width:900px){.grid{grid-template-columns:1fr;}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:.75rem;padding:1rem;}
+  .card h2{margin:0 0 .6rem;font-size:.9rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+  table{width:100%;border-collapse:collapse;font-size:.82rem;}
+  th,td{padding:.35rem .5rem;border-bottom:1px solid var(--border);text-align:left;}
+  th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--panel);}
+  tbody tr:hover{background:var(--panel2);}
+  input,select,button.btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:.4rem;padding:.35rem .5rem;font-size:.82rem;}
+  input[type=number]{width:5.5rem;}
+  button.btn{cursor:pointer;}
+  button.btn:hover{border-color:var(--accent);}
+  button.btn.primary{background:var(--accent);border-color:var(--accent);color:#08111d;font-weight:600;}
+  .toolbar{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;}
+  .tablewrap{max-height:60vh;overflow:auto;border:1px solid var(--border);border-radius:.5rem;}
+  .pill{font-size:.72rem;padding:.15rem .5rem;border-radius:1rem;background:var(--panel2);color:var(--muted);border:1px solid var(--border);}
+  canvas{background:var(--panel2);border-radius:.5rem;max-width:100%;}
+  .legend{display:flex;gap:.9rem;flex-wrap:wrap;margin-top:.6rem;font-size:.78rem;color:var(--muted);}
+  .legend span{display:inline-flex;align-items:center;gap:.35rem;}
+  .swatch{width:.7rem;height:.7rem;border-radius:50%;display:inline-block;}
+  .layerToggles{display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:.6rem;font-size:.82rem;}
+  .layerToggles label{display:flex;align-items:center;gap:.35rem;cursor:pointer;}
+  .stat{display:flex;justify-content:space-between;padding:.25rem 0;border-bottom:1px dashed var(--border);font-size:.82rem;}
+  .stat b{font-weight:600;}
+  .hint{color:var(--muted);font-size:.78rem;line-height:1.4;}
+  .danger{color:var(--red);}
+  .badge-type{font-size:.7rem;padding:.1rem .4rem;border-radius:.3rem;background:var(--panel2);border:1px solid var(--border);}
+  a.filebtn{display:inline-block;}
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧭 TectonicsWeb</h1>
+  <span class="sub">Re-implementación en navegador de TectonicsFP (stereonet + rosa) — sin instalación</span>
+</header>
+
+<nav id="tabs">
+  <button data-view="editor" class="active">Datos</button>
+  <button data-view="stereonet">Stereonet</button>
+  <button data-view="rose">Diagrama de rosa</button>
+  <button data-view="contour">Contorneo</button>
+  <button data-view="inversion">Inversión de esfuerzos</button>
+  <button data-view="analysis">Bingham / Dihedra</button>
+  <button data-view="rotate">Rotación</button>
+</nav>
+
+<main>
+
+  <!-- ======================= EDITOR VIEW ======================= -->
+  <section id="view-editor" class="view active">
+    <div class="card">
+      <h2>Conjunto de datos estructurales</h2>
+      <div class="toolbar">
+        <button class="btn primary" id="btnAddRow">+ Agregar medida</button>
+        <button class="btn" id="btnAddSample">Cargar datos de ejemplo</button>
+        <label class="btn filebtn">Importar CSV<input type="file" id="fileImport" accept=".csv,text/csv" style="display:none"></label>
+        <button class="btn" id="btnExportCsv">Exportar CSV</button>
+        <button class="btn danger" id="btnClearAll">Borrar todo</button>
+        <span class="pill" id="rowCount">0 medidas</span>
+      </div>
+      <p class="hint">
+        Columnas: <b>Tipo</b> (estratificación, foliación, eje de pliegue, plano axial, clivaje, lineación, falla),
+        <b>DipDir/Dip</b> (planos, en grados), <b>Azimuth/Plunge</b> (líneas, en grados),
+        <b>Sentido</b> y <b>Calidad</b> (0–4, solo fallas). CSV esperado: <code>type,dipDir,dip,azimuth,plunge,sense,quality,label</code>.
+      </p>
+      <div class="tablewrap">
+        <table id="dataTable">
+          <thead>
+            <tr>
+              <th>#</th><th>Tipo</th><th>DipDir°</th><th>Dip°</th><th>Azimuth°</th><th>Plunge°</th>
+              <th>Sentido</th><th>Calidad</th><th>Etiqueta</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="dataBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= STEREONET VIEW ======================= -->
+  <section id="view-stereonet" class="view">
+    <div class="grid">
+      <div class="card">
+        <h2>Red equiareal (Schmidt), hemisferio inferior</h2>
+        <div class="layerToggles">
+          <label><input type="checkbox" id="lyPoles" checked> Polos de planos</label>
+          <label><input type="checkbox" id="lyGreatCircles"> Círculos máximos</label>
+          <label><input type="checkbox" id="lyLineations" checked> Lineaciones</label>
+          <label><input type="checkbox" id="lyGrid" checked> Grilla</label>
+          <label><input type="checkbox" id="lyMean"> Vector medio</label>
+        </div>
+        <canvas id="netCanvas" width="560" height="560"></canvas>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--accent)"></i>Plano (polo)</span>
+          <span><i class="swatch" style="background:var(--accent2)"></i>Lineación</span>
+          <span><i class="swatch" style="background:var(--green)"></i>Vector medio</span>
+        </div>
+        <div class="toolbar" style="margin-top:.75rem">
+          <button class="btn" id="btnExportNetPng">Exportar PNG</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Estadísticas (análisis de vector / Fisher, simplificado)</h2>
+        <div id="stereoStats"><p class="hint">Sin datos.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= ROSE VIEW ======================= -->
+  <section id="view-rose" class="view">
+    <div class="grid">
+      <div class="card">
+        <h2>Diagrama de rosa</h2>
+        <div class="toolbar">
+          <label>Fuente:
+            <select id="roseSource">
+              <option value="dipDir">DipDir (planos)</option>
+              <option value="azimuth">Azimuth (líneas)</option>
+            </select>
+          </label>
+          <label>Intervalo (°): <input type="number" id="roseBin" value="10" min="1" max="90" step="1"></label>
+          <label><input type="checkbox" id="roseBipolar" checked> Bipolar (0–360 → 0–180)</label>
+        </div>
+        <canvas id="roseCanvas" width="560" height="560"></canvas>
+        <div class="toolbar" style="margin-top:.75rem">
+          <button class="btn" id="btnExportRosePng">Exportar PNG</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Frecuencias por sector</h2>
+        <div id="roseStats" class="tablewrap" style="max-height:70vh"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= CONTOUR VIEW ======================= -->
+  <section id="view-contour" class="view">
+    <div class="grid">
+      <div class="card">
+        <h2>Contorneo de densidad de polos</h2>
+        <div class="toolbar">
+          <label>Método:
+            <select id="contMethod">
+              <option value="gauss">Gaussiano (tipo Kamb)</option>
+              <option value="circle">Círculo de conteo (1%)</option>
+            </select>
+          </label>
+          <label>Fuente:
+            <select id="contSource">
+              <option value="poles">Polos de planos</option>
+              <option value="lines">Lineaciones</option>
+            </select>
+          </label>
+        </div>
+        <canvas id="contCanvas" width="560" height="560"></canvas>
+        <p class="hint">Densidad expresada como % del uniforme esperado (1σ del método de Kamb para el modo gaussiano). Grilla de muestreo 70×70 sobre el hemisferio inferior.</p>
+        <div class="toolbar" style="margin-top:.5rem">
+          <button class="btn" id="btnExportContPng">Exportar PNG</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Niveles de contorno</h2>
+        <div id="contLegend"></div>
+        <p class="hint">El conteo circular replica <code>Contour.pas → CountCircle</code> (círculo de área 1% de la red); el modo gaussiano aproxima <code>CountCurve</code> (ponderación gaussiana sobre grilla triangular), ambos de TectonicsFP.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= STRESS INVERSION VIEW ======================= -->
+  <section id="view-inversion" class="view">
+    <div class="grid">
+      <div class="card">
+        <h2>Tensor de esfuerzo candidato (método Bott/Angelier)</h2>
+        <p class="hint">Requiere datos tipo <b>Falla</b> con azimuth/plunge de estría y sentido. Se calcula la "fluctuación" (ángulo de desajuste) por falla, igual que <code>Invers.pas → calcfluct2</code>.</p>
+        <div class="toolbar">
+          <label>σ1 trend° <input type="number" id="s1t" value="0" min="0" max="360"></label>
+          <label>σ1 plunge° <input type="number" id="s1p" value="90" min="0" max="90"></label>
+        </div>
+        <div class="toolbar">
+          <label>σ2 trend° <input type="number" id="s2t" value="90" min="0" max="360"></label>
+          <label>σ2 plunge° <input type="number" id="s2p" value="0" min="0" max="90"></label>
+        </div>
+        <div class="toolbar">
+          <label>Razón de esfuerzo R=(σ2-σ3)/(σ1-σ3) <input type="number" id="stressRatio" value="0.5" min="0" max="1" step="0.05"></label>
+        </div>
+        <div class="toolbar">
+          <button class="btn primary" id="btnCalcInversion">Calcular ajuste</button>
+          <button class="btn" id="btnAutoFitInversion">Auto-ajuste (búsqueda en grilla)</button>
+        </div>
+        <div id="inversionResult"></div>
+      </div>
+      <div class="card">
+        <h2>Desajuste por falla</h2>
+        <div id="inversionTable" class="tablewrap" style="max-height:60vh"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= BINGHAM / DIHEDRA VIEW ======================= -->
+  <section id="view-analysis" class="view">
+    <div class="grid">
+      <div class="card">
+        <h2>Estadística de Bingham (autovectores de la matriz de orientación)</h2>
+        <p class="hint">Análogo a <code>bingha.pas → CalcEigenvect</code>: descompone la matriz de orientación de los polos en 3 autovalores/autovectores (mín/int/máx) para clasificar el tejido como agrupamiento, guirnalda o aleatorio.</p>
+        <div class="toolbar">
+          <label>Fuente:
+            <select id="bghSource">
+              <option value="poles">Polos de planos</option>
+              <option value="lines">Lineaciones</option>
+            </select>
+          </label>
+          <button class="btn primary" id="btnCalcBingham">Calcular</button>
+        </div>
+        <div id="binghamResult"></div>
+      </div>
+      <div class="card">
+        <h2>Diedros rectos (método NDA / Angelier-Mechler)</h2>
+        <p class="hint">Análogo a <code>Nda.pas</code>/<code>Dihedra.pas</code>: para cada falla, el plano de falla y su plano auxiliar dividen la esfera en 4 diedros P/T. Se acumula compatibilidad en una grilla para estimar las zonas de mejor ajuste de σ1 (P) y σ3 (T).</p>
+        <div class="toolbar">
+          <button class="btn primary" id="btnCalcDihedra">Calcular diedros</button>
+        </div>
+        <canvas id="dihedraCanvas" width="480" height="480"></canvas>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--accent)"></i>Zona P (compresión)</span>
+          <span><i class="swatch" style="background:var(--accent2)"></i>Zona T (tensión)</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= ROTATION TOOL VIEW ======================= -->
+  <section id="view-rotate" class="view">
+    <div class="card">
+      <h2>Rotación de conjunto de datos (restauración estructural)</h2>
+      <p class="hint">Aplica una rotación de eje/ángulo a todas las medidas, igual que <code>rotate.pas</code> usando <code>Angle.Rotate</code>. Útil para restituir datos a la posición pre-deformación (p. ej. desplegar un pliegue).</p>
+      <div class="toolbar">
+        <label>Eje — trend° <input type="number" id="rotAxisTrend" value="0" min="0" max="360"></label>
+        <label>Eje — plunge° <input type="number" id="rotAxisPlunge" value="0" min="0" max="90"></label>
+        <label>Ángulo° <input type="number" id="rotAngle" value="30" min="-180" max="180"></label>
+      </div>
+      <div class="toolbar">
+        <button class="btn primary" id="btnApplyRotation">Aplicar a todo el dataset</button>
+        <button class="btn" id="btnPreviewRotation">Vista previa (no guarda)</button>
+        <span class="pill hint">La rotación es irreversible sobre los datos actuales; exporta CSV antes si quieres conservar el original.</span>
+      </div>
+      <div id="rotatePreview" class="tablewrap" style="max-height:50vh;margin-top:.75rem"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+"use strict";
+
+/* ============================================================
+   1. MODELO DE DATOS
+   ============================================================ */
+const FEATURE_TYPES = [
+  {id:"bedding",     label:"Estratificación", kind:"plane"},
+  {id:"foliation",   label:"Foliación",       kind:"plane"},
+  {id:"axialplane",  label:"Plano axial",     kind:"plane"},
+  {id:"cleavage",    label:"Clivaje",         kind:"plane"},
+  {id:"fault",       label:"Falla",           kind:"plane"},
+  {id:"foldaxis",    label:"Eje de pliegue",  kind:"line"},
+  {id:"lineation",   label:"Lineación",       kind:"line"},
+  {id:"striation",   label:"Estría (falla)",  kind:"line"},
+];
+const SENSES = ["-","normal","inversa","dextral","sinistral"];
+const kindOf = t => (FEATURE_TYPES.find(f=>f.id===t)||{}).kind || "plane";
+
+let dataset = [];
+let nextId = 1;
+
+function loadFromStorage(){
+  try{
+    const raw = localStorage.getItem("tectonicsweb_dataset");
+    if(raw){ dataset = JSON.parse(raw); nextId = 1+dataset.reduce((m,r)=>Math.max(m,r.id),0); }
+  }catch(e){ console.warn("localStorage load failed", e); }
+}
+function saveToStorage(){
+  try{ localStorage.setItem("tectonicsweb_dataset", JSON.stringify(dataset)); }catch(e){}
+}
+function addRow(row){
+  dataset.push(Object.assign({id:nextId++, type:"bedding", dipDir:0, dip:0, azimuth:0, plunge:0, sense:0, quality:0, label:""}, row));
+  saveToStorage();
+}
+function removeRow(id){ dataset = dataset.filter(r=>r.id!==id); saveToStorage(); }
+
+/* ============================================================
+   2. NUCLEO MATEMATICO (fiel a Angle.pas / Draw.pas de TectonicsFP)
+   ============================================================ */
+const D2R = Math.PI/180, R2D = 180/Math.PI, SQRT2 = Math.SQRT2;
+
+// PolCar (types.pas L773): trend/plunge -> cosenos directores
+function polCar(azimuthDeg, dipDeg){
+  const az = azimuthDeg*D2R, dp = dipDeg*D2R;
+  return [ Math.cos(dp)*Math.sin(az), Math.cos(dp)*Math.cos(az), -Math.sin(dp) ];
+}
+// CarPol (types.pas L780): cosenos directores -> trend/plunge
+function carPol(c1,c2,c3){
+  const mag = Math.sqrt(c1*c1+c2*c2+c3*c3)||1;
+  c1/=mag; c2/=mag; c3/=mag;
+  if(c1===0 && c2===0) return [0,90];
+  const pp2 = Math.sqrt(c1*c1+c2*c2);
+  const beta = pp2<1e-9 ? Math.PI/2 : Math.atan(c3/pp2);
+  let azimuth;
+  if(c2===0){ azimuth = (c1*c3>0)?270:90; }
+  else{
+    let pp1 = (2 - Math.sign(c1) - Math.sign(c1)*Math.sign(c2))*Math.PI/2 + Math.atan(c1/c2);
+    if(beta>0) pp1 += Math.PI;
+    if(pp1 > 2*Math.PI) pp1 -= 2*Math.PI;
+    azimuth = pp1*R2D;
+  }
+  return [ (azimuth+360)%360, Math.abs(beta)*R2D ];
+}
+// Proyección equiareal (Schmidt), hemisferio inferior (Draw.pas: RP = Radius*SQRT2*SIN((90-plunge)/2))
+// trend en grados (0=N, sentido horario), plunge en grados (0..90, hacia abajo positivo)
+function stereoProject(trendDeg, plungeDeg, R){
+  const p = Math.max(0, Math.min(90, plungeDeg));
+  const r = R*SQRT2*Math.sin(D2R*(90-p)/2);
+  const t = trendDeg*D2R;
+  return { x: r*Math.sin(t), y: -r*Math.cos(t) }; // y negativo = arriba = norte en canvas
+}
+// Polo de un plano dipDir/dip: trend = dipDir+180 (mod 360), plunge = 90-dip
+function polePlane(dipDir, dip){
+  return { trend:(dipDir+180)%360, plunge: 90-dip };
+}
+// Puntos de un círculo máximo (traza del plano) en la red equiareal, por rotación del meridiano
+function greatCirclePoints(dipDir, dip, n=90){
+  // El plano contiene todos los puntos a 90° del polo. Generamos por rotación
+  // alrededor del eje horizontal perpendicular al dipDir (strike), variando el ángulo.
+  const pole = polCar((dipDir+180)%360, 90-dip); // vector polo
+  // eje de rotación = dirección del strike (horizontal, perpendicular al dipDir)
+  const strikeTrend = (dipDir+270)%360;
+  const axis = polCar(strikeTrend, 0);
+  const pts = [];
+  for(let i=0;i<=n;i++){
+    const ang = (i/n)*Math.PI - Math.PI/2; // -90..+90 grados alrededor del eje
+    const v = rotateVector(pole, axis, ang);
+    let [trend, plunge] = carPol(v[0], v[1], v[2]);
+    if(v[2] < 0){ // hemisferio superior -> reflejar al inferior (equivalente antipodal)
+      trend = (trend+180)%360; plunge = -plunge;
+    }
+    if(plunge>=0) pts.push([trend, plunge]);
+  }
+  return pts;
+}
+// Rotación de un vector alrededor de un eje unitario por un ángulo (radianes) - Rodrigues, análogo a Angle.pas Rotate
+function rotateVector(v, axis, angle){
+  const [x,y,z]=v, mag=Math.sqrt(axis[0]**2+axis[1]**2+axis[2]**2)||1;
+  const [ax,ay,az]=[axis[0]/mag,axis[1]/mag,axis[2]/mag];
+  const cosA=Math.cos(angle), sinA=Math.sin(angle);
+  const dot = ax*x+ay*y+az*z;
+  return [
+    x*cosA + (ay*z-az*y)*sinA + ax*dot*(1-cosA),
+    y*cosA + (az*x-ax*z)*sinA + ay*dot*(1-cosA),
+    z*cosA + (ax*y-ay*x)*sinA + az*dot*(1-cosA),
+  ];
+}
+// Vector medio + estadísticas simplificadas tipo Fisher
+function meanVector(vectors){
+  let s=[0,0,0];
+  vectors.forEach(v=>{ s[0]+=v[0]; s[1]+=v[1]; s[2]+=v[2]; });
+  const R = Math.sqrt(s[0]**2+s[1]**2+s[2]**2);
+  const n = vectors.length;
+  if(R<1e-9 || n===0) return null;
+  const mean = [s[0]/R, s[1]/R, s[2]/R];
+  const k = n>1 ? (n-1)/(n-R) : NaN; // parámetro de concentración de Fisher (aprox.)
+  return { mean, R, n, Rbar: R/n, k };
+}
+
+/* ============================================================
+   3. VISTAS / NAVEGACION
+   ============================================================ */
+document.querySelectorAll("#tabs button").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll("#tabs button").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("view-"+btn.dataset.view).classList.add("active");
+    renderAll();
+  });
+});
+
+/* ============================================================
+   4. EDITOR
+   ============================================================ */
+const dataBody = document.getElementById("dataBody");
+function typeOptions(sel){
+  return FEATURE_TYPES.map(f=>`<option value="${f.id}" ${f.id===sel?"selected":""}>${f.label}</option>`).join("");
+}
+function senseOptions(sel){
+  return SENSES.map((s,i)=>`<option value="${i}" ${i===sel?"selected":""}>${s}</option>`).join("");
+}
+function renderEditor(){
+  document.getElementById("rowCount").textContent = dataset.length + " medidas";
+  dataBody.innerHTML = dataset.map((r,idx)=>`
+    <tr data-id="${r.id}">
+      <td>${idx+1}</td>
+      <td><select data-f="type">${typeOptions(r.type)}</select></td>
+      <td><input data-f="dipDir" type="number" min="0" max="360" value="${r.dipDir}"></td>
+      <td><input data-f="dip" type="number" min="0" max="90" value="${r.dip}"></td>
+      <td><input data-f="azimuth" type="number" min="0" max="360" value="${r.azimuth}"></td>
+      <td><input data-f="plunge" type="number" min="0" max="90" value="${r.plunge}"></td>
+      <td><select data-f="sense">${senseOptions(r.sense)}</select></td>
+      <td><input data-f="quality" type="number" min="0" max="4" value="${r.quality}"></td>
+      <td><input data-f="label" type="text" value="${r.label||""}" style="width:7rem"></td>
+      <td><button class="btn danger" data-del="${r.id}">✕</button></td>
+    </tr>`).join("");
+}
+dataBody.addEventListener("input", e=>{
+  const tr = e.target.closest("tr"); if(!tr) return;
+  const id = Number(tr.dataset.id);
+  const row = dataset.find(r=>r.id===id); if(!row) return;
+  const f = e.target.dataset.f;
+  row[f] = (f==="type"||f==="label") ? e.target.value : Number(e.target.value);
+  if(f==="sense") row[f] = Number(e.target.value);
+  saveToStorage();
+  renderStereonet(); renderRose();
+});
+dataBody.addEventListener("click", e=>{
+  const id = e.target.dataset.del;
+  if(id!==undefined){ removeRow(Number(id)); renderAll(); }
+});
+document.getElementById("btnAddRow").addEventListener("click", ()=>{ addRow({}); renderAll(); });
+document.getElementById("btnClearAll").addEventListener("click", ()=>{
+  if(dataset.length && !confirm("¿Borrar todas las medidas?")) return;
+  dataset = []; saveToStorage(); renderAll();
+});
+document.getElementById("btnAddSample").addEventListener("click", ()=>{
+  const sample = [
+    {type:"bedding",  dipDir:120, dip:35, label:"S0-1"},
+    {type:"bedding",  dipDir:130, dip:40, label:"S0-2"},
+    {type:"bedding",  dipDir:115, dip:30, label:"S0-3"},
+    {type:"bedding",  dipDir:125, dip:38, label:"S0-4"},
+    {type:"foliation",dipDir:210, dip:60, label:"Sn-1"},
+    {type:"foliation",dipDir:200, dip:55, label:"Sn-2"},
+    {type:"lineation",azimuth:45, plunge:20, label:"Lin-1"},
+    {type:"lineation",azimuth:50, plunge:25, label:"Lin-2"},
+    {type:"lineation",azimuth:48, plunge:18, label:"Lin-3"},
+    {type:"fault",dipDir:300, dip:70, sense:1, quality:1, label:"F1"},
+  ];
+  sample.forEach(s=>addRow(s));
+  renderAll();
+});
+
+/* ---- CSV import/export ---- */
+document.getElementById("btnExportCsv").addEventListener("click", ()=>{
+  const header = "type,dipDir,dip,azimuth,plunge,sense,quality,label";
+  const lines = dataset.map(r=>[r.type,r.dipDir,r.dip,r.azimuth,r.plunge,r.sense,r.quality,(r.label||"").replace(/,/g,";")].join(","));
+  const blob = new Blob([header+"\n"+lines.join("\n")], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "tectonicsweb_data.csv"; a.click();
+  URL.revokeObjectURL(a.href);
+});
+document.getElementById("fileImport").addEventListener("change", e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const text = reader.result;
+    const lines = text.split(/\r?\n/).filter(l=>l.trim().length);
+    if(!lines.length) return;
+    const header = lines[0].split(",").map(h=>h.trim());
+    const idx = k => header.indexOf(k);
+    const hasHeader = idx("type")>=0 || idx("dipDir")>=0 || idx("azimuth")>=0;
+    const rows = hasHeader ? lines.slice(1) : lines;
+    let imported = 0;
+    rows.forEach(line=>{
+      const cols = line.split(",");
+      if(hasHeader){
+        addRow({
+          type: cols[idx("type")] || "bedding",
+          dipDir: Number(cols[idx("dipDir")])||0,
+          dip: Number(cols[idx("dip")])||0,
+          azimuth: Number(cols[idx("azimuth")])||0,
+          plunge: Number(cols[idx("plunge")])||0,
+          sense: Number(cols[idx("sense")])||0,
+          quality: Number(cols[idx("quality")])||0,
+          label: cols[idx("label")] || "",
+        });
+      }else if(cols.length>=2){
+        // formato mínimo: dipDir,dip
+        addRow({type:"bedding", dipDir:Number(cols[0])||0, dip:Number(cols[1])||0});
+      }
+      imported++;
+    });
+    renderAll();
+    alert(imported + " medidas importadas.");
+    e.target.value = "";
+  };
+  reader.readAsText(file);
+});
+
+/* ============================================================
+   5. STEREONET
+   ============================================================ */
+const netCanvas = document.getElementById("netCanvas");
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+function drawNetBase(ctx, cx, cy, R, showGrid){
+  ctx.clearRect(0,0,netCanvas.width, netCanvas.height);
+  ctx.save();
+  ctx.strokeStyle = css('--border'); ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,2*Math.PI); ctx.stroke();
+  if(showGrid){
+    ctx.strokeStyle = css('--net'); ctx.lineWidth = 0.6;
+    // circulos de igual buzamiento (10 en 10)
+    for(let d=10; d<90; d+=10){
+      const r = R*SQRT2*Math.sin(D2R*(90-d)/2);
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,2*Math.PI); ctx.stroke();
+    }
+    // líneas radiales cada 30°
+    for(let a=0; a<360; a+=30){
+      const t=a*D2R;
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+R*Math.sin(t), cy-R*Math.cos(t)); ctx.stroke();
+    }
+  }
+  ctx.fillStyle = css('--muted'); ctx.font = "11px sans-serif"; ctx.textAlign="center";
+  ctx.fillText("N", cx, cy-R-8);
+  ctx.fillText("S", cx, cy+R+16);
+  ctx.fillText("E", cx+R+10, cy+4);
+  ctx.fillText("W", cx-R-10, cy+4);
+  ctx.restore();
+}
+
+function renderStereonet(){
+  const ctx = netCanvas.getContext("2d");
+  const cx = netCanvas.width/2, cy = netCanvas.height/2, R = Math.min(cx,cy)-30;
+  const showGrid = document.getElementById("lyGrid").checked;
+  const showPoles = document.getElementById("lyPoles").checked;
+  const showGC = document.getElementById("lyGreatCircles").checked;
+  const showLin = document.getElementById("lyLineations").checked;
+  const showMean = document.getElementById("lyMean").checked;
+  drawNetBase(ctx, cx, cy, R, showGrid);
+
+  const poleVecs = [];
+  dataset.forEach(r=>{
+    const kind = kindOf(r.type);
+    if(kind==="plane"){
+      const {trend,plunge} = polePlane(r.dipDir, r.dip);
+      poleVecs.push(polCar(trend,plunge));
+      if(showPoles){
+        const {x,y} = stereoProject(trend, plunge, R);
+        ctx.fillStyle = css('--accent');
+        ctx.beginPath(); ctx.arc(cx+x, cy+y, 3.5, 0, 2*Math.PI); ctx.fill();
+      }
+      if(showGC){
+        const pts = greatCirclePoints(r.dipDir, r.dip);
+        ctx.strokeStyle = css('--accent'); ctx.globalAlpha=.55; ctx.lineWidth=1;
+        ctx.beginPath();
+        pts.forEach(([t,p],i)=>{
+          const {x,y} = stereoProject(t,p,R);
+          if(i===0) ctx.moveTo(cx+x,cy+y); else ctx.lineTo(cx+x,cy+y);
+        });
+        ctx.stroke(); ctx.globalAlpha=1;
+      }
+    } else {
+      if(showLin){
+        const {x,y} = stereoProject(r.azimuth, r.plunge, R);
+        ctx.fillStyle = css('--accent2');
+        ctx.beginPath(); ctx.moveTo(cx+x, cy+y-4); ctx.lineTo(cx+x-3.5, cy+y+3); ctx.lineTo(cx+x+3.5, cy+y+3); ctx.closePath(); ctx.fill();
+      }
+    }
+  });
+
+  if(showMean && poleVecs.length){
+    const mv = meanVector(poleVecs);
+    if(mv){
+      const [trend, plunge] = carPol(mv.mean[0], mv.mean[1], mv.mean[2]);
+      const p2 = plunge<0 ? -plunge : plunge; // ya viene abs
+      const {x,y} = stereoProject((mv.mean[2]<0)?(trend+180)%360:trend, p2, R);
+      ctx.strokeStyle = css('--green'); ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(cx+x, cy+y, 7, 0, 2*Math.PI); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx+x-9,cy+y); ctx.lineTo(cx+x+9,cy+y); ctx.moveTo(cx+x,cy+y-9); ctx.lineTo(cx+x,cy+y+9); ctx.stroke();
+    }
+  }
+
+  renderStereoStats(poleVecs);
+}
+
+function renderStereoStats(poleVecs){
+  const el = document.getElementById("stereoStats");
+  const planeCount = dataset.filter(r=>kindOf(r.type)==="plane").length;
+  const lineCount = dataset.filter(r=>kindOf(r.type)==="line").length;
+  let html = `<div class="stat"><span>Total de medidas</span><b>${dataset.length}</b></div>
+              <div class="stat"><span>Planos</span><b>${planeCount}</b></div>
+              <div class="stat"><span>Líneas</span><b>${lineCount}</b></div>`;
+  if(poleVecs.length){
+    const mv = meanVector(poleVecs);
+    if(mv){
+      const [trend, plunge] = carPol(mv.mean[0], mv.mean[1], mv.mean[2]);
+      html += `<div class="stat"><span>Vector medio de polos (trend/plunge)</span><b>${trend.toFixed(1)}° / ${Math.abs(plunge).toFixed(1)}°</b></div>
+               <div class="stat"><span>R (resultante)</span><b>${mv.R.toFixed(2)} / ${mv.n}</b></div>
+               <div class="stat"><span>R̄ (fuerza de agrupamiento, 0–1)</span><b>${mv.Rbar.toFixed(3)}</b></div>
+               <div class="stat"><span>κ de Fisher (aprox.)</span><b>${isFinite(mv.k)?mv.k.toFixed(2):"—"}</b></div>`;
+    }
+  }
+  el.innerHTML = html || `<p class="hint">Sin datos.</p>`;
+}
+
+document.getElementById("btnExportNetPng").addEventListener("click", ()=> exportCanvasPng(netCanvas, "stereonet.png"));
+["lyPoles","lyGreatCircles","lyLineations","lyGrid","lyMean"].forEach(id=>{
+  document.getElementById(id).addEventListener("change", renderStereonet);
+});
+
+/* ============================================================
+   6. DIAGRAMA DE ROSA
+   ============================================================ */
+const roseCanvas = document.getElementById("roseCanvas");
+function renderRose(){
+  const ctx = roseCanvas.getContext("2d");
+  const cx = roseCanvas.width/2, cy = roseCanvas.height/2, R = Math.min(cx,cy)-40;
+  ctx.clearRect(0,0,roseCanvas.width, roseCanvas.height);
+
+  const source = document.getElementById("roseSource").value;
+  const binSize = Math.max(1, Math.min(90, Number(document.getElementById("roseBin").value)||10));
+  const bipolar = document.getElementById("roseBipolar").checked;
+
+  const values = dataset
+    .filter(r => source==="dipDir" ? kindOf(r.type)==="plane" : kindOf(r.type)==="line")
+    .map(r => source==="dipDir" ? r.dipDir : r.azimuth)
+    .filter(v => v!==undefined && !isNaN(v))
+    .map(v => ((v%360)+360)%360);
+
+  const nBins = Math.round(360/binSize);
+  const counts = new Array(nBins).fill(0);
+  values.forEach(v=>{
+    let vv = v;
+    if(bipolar) vv = vv % 180; // pliega 180-360 sobre 0-180
+    let bin = Math.floor(vv/binSize) % nBins;
+    counts[bin]++;
+    if(bipolar){ // sumar también el sector opuesto (petalo simétrico)
+      const oppBin = (bin + Math.round(180/binSize)) % nBins;
+      counts[oppBin]++;
+    }
+  });
+  const maxCount = Math.max(1, ...counts);
+
+  // grilla
+  ctx.strokeStyle = css('--border'); ctx.lineWidth=1;
+  for(let ring=1; ring<=4; ring++){
+    ctx.beginPath(); ctx.arc(cx,cy, R*ring/4, 0, 2*Math.PI); ctx.stroke();
+  }
+  ctx.strokeStyle = css('--net');
+  for(let a=0;a<360;a+=30){
+    const t=a*D2R;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+R*Math.sin(t), cy-R*Math.cos(t)); ctx.stroke();
+  }
+  ctx.fillStyle = css('--muted'); ctx.font="11px sans-serif"; ctx.textAlign="center";
+  ctx.fillText("N", cx, cy-R-10); ctx.fillText("E", cx+R+10, cy+4);
+  ctx.fillText("S", cx, cy+R+18); ctx.fillText("W", cx-R-10, cy+4);
+
+  // petalos
+  ctx.fillStyle = css('--accent'); ctx.globalAlpha = .85;
+  for(let i=0;i<nBins;i++){
+    if(!counts[i]) continue;
+    const r = R * (counts[i]/maxCount);
+    const a0 = i*binSize*D2R, a1 = (i+1)*binSize*D2R;
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r, a0-Math.PI/2, a1-Math.PI/2);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  ctx.strokeStyle = css('--accent'); ctx.lineWidth=.8;
+  for(let i=0;i<nBins;i++){
+    if(!counts[i]) continue;
+    const r = R * (counts[i]/maxCount);
+    const a0 = i*binSize*D2R, a1 = (i+1)*binSize*D2R;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r, a0-Math.PI/2, a1-Math.PI/2); ctx.closePath(); ctx.stroke();
+  }
+
+  renderRoseStats(counts, binSize, values.length, maxCount);
+}
+function renderRoseStats(counts, binSize, total, maxCount){
+  const rows = counts.map((c,i)=>`<tr><td>${(i*binSize)}°–${(i*binSize+binSize)}°</td><td>${c}</td></tr>`).join("");
+  document.getElementById("roseStats").innerHTML = `
+    <table><thead><tr><th>Sector</th><th>Frecuencia</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="hint" style="padding:.5rem">Total de valores: ${total} · Máximo por sector: ${maxCount}</p>`;
+}
+["roseSource","roseBin","roseBipolar"].forEach(id=>{
+  document.getElementById(id).addEventListener("input", renderRose);
+  document.getElementById(id).addEventListener("change", renderRose);
+});
+document.getElementById("btnExportRosePng").addEventListener("click", ()=> exportCanvasPng(roseCanvas, "rose_diagram.png"));
+
+function exportCanvasPng(canvas, filename){
+  const a = document.createElement("a");
+  a.href = canvas.toDataURL("image/png"); a.download = filename; a.click();
+}
+
+/* ============================================================
+   7. CONTORNEO DE DENSIDAD (Contour.pas: CountCircle / CountCurve)
+   ============================================================ */
+function getUnitVectors(source){
+  // source: "poles" -> polos de planos ; "lines" -> lineaciones
+  const vecs = [];
+  dataset.forEach(r=>{
+    if(source==="poles" && kindOf(r.type)==="plane"){
+      const {trend,plunge} = polePlane(r.dipDir, r.dip);
+      vecs.push(polCar(trend,plunge));
+    } else if(source==="lines" && kindOf(r.type)==="line"){
+      vecs.push(polCar(r.azimuth, r.plunge));
+    }
+  });
+  return vecs;
+}
+function renderContour(){
+  const ctx = document.getElementById("contCanvas").getContext("2d");
+  const canvas = ctx.canvas;
+  const cx = canvas.width/2, cy = canvas.height/2, R = Math.min(cx,cy)-30;
+  drawNetBase(ctx, cx, cy, R, true);
+
+  const method = document.getElementById("contMethod").value;
+  const source = document.getElementById("contSource").value;
+  const vecs = getUnitVectors(source);
+  const legend = document.getElementById("contLegend");
+  if(vecs.length < 3){
+    legend.innerHTML = `<p class="hint">Se necesitan al menos 3 medidas del tipo elegido.</p>`;
+    return;
+  }
+  const n = vecs.length;
+  const N_GRID = 70;
+  // opening half-angle for a 1% area counting circle: (1-cos theta)/2 = 0.01
+  const thetaCircle = Math.acos(1-0.02);
+  // Kamb (1959) standard deviation-based gaussian: k controls effective counting angle (~ same 1% area circle)
+  const kKamb = 3.0; // typical shape/concentration factor
+  const grid = [];
+  let maxDensity = 0;
+  for(let gy=0; gy<N_GRID; gy++){
+    const row = [];
+    for(let gx=0; gx<N_GRID; gx++){
+      const px = (gx/(N_GRID-1)-0.5)*2*R;
+      const py = (gy/(N_GRID-1)-0.5)*2*R;
+      const rr = Math.sqrt(px*px+py*py);
+      if(rr>R){ row.push(null); continue; }
+      // invertir proyección equiareal -> trend/plunge del punto de grilla
+      const rho = rr/R; // 0..1
+      const plunge = 90 - 2*R2D*Math.asin(rho/SQRT2);
+      const trend = (R2D*Math.atan2(px,-py)+360)%360;
+      const gv = polCar(trend, plunge);
+      let sum = 0;
+      for(let i=0;i<n;i++){
+        const cosAng = gv[0]*vecs[i][0]+gv[1]*vecs[i][1]+gv[2]*vecs[i][2];
+        if(method==="circle"){
+          if(Math.acos(Math.max(-1,Math.min(1,cosAng))) <= thetaCircle) sum += 1;
+        } else {
+          // ponderación gaussiana tipo Kamb: peso decae con el ángulo, normalizado
+          sum += Math.exp(kKamb*(cosAng-1));
+        }
+      }
+      const pct = (sum/n) * 100; // % del total de puntos en la "célula" -> se re-normaliza abajo como % de lo esperado uniforme
+      row.push(pct);
+      if(pct>maxDensity) maxDensity = pct;
+    }
+    grid.push(row);
+  }
+  // normalizar respecto al valor esperado bajo distribución uniforme (área de la célula de conteo)
+  const expected = method==="circle" ? 100*(1-Math.cos(thetaCircle))/2 : 100/n; // aprox.
+  const bands = [0.5,1,1.5,2,3,4,6,8]; // múltiplos de "expected" -> similar a niveles de sigma/porcentaje
+  const colors = ["#274060","#2b5a86","#2f7fa8","#33a08f","#63b23a","#c8c93a","#e0872a","#e0472a"];
+
+  const cellW = (2*R)/N_GRID, cellH=(2*R)/N_GRID;
+  for(let gy=0; gy<N_GRID; gy++){
+    for(let gx=0; gx<N_GRID; gx++){
+      const v = grid[gy][gx];
+      if(v===null) continue;
+      let band=-1;
+      for(let b=0;b<bands.length;b++){ if(v >= bands[b]*expected) band=b; }
+      if(band<0) continue;
+      const px = (gx/(N_GRID-1)-0.5)*2*R;
+      const py = (gy/(N_GRID-1)-0.5)*2*R;
+      ctx.fillStyle = colors[band];
+      ctx.globalAlpha = 0.75;
+      ctx.fillRect(cx+px-cellW/2, cy+py-cellH/2, cellW+0.6, cellH+0.6);
+    }
+  }
+  ctx.globalAlpha = 1;
+  // volver a dibujar el círculo/grilla encima para que no quede tapado
+  ctx.strokeStyle = css('--border'); ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,2*Math.PI); ctx.stroke();
+
+  legend.innerHTML = `<div class="legend" style="flex-direction:column;align-items:flex-start">` +
+    bands.map((b,i)=>`<span><i class="swatch" style="background:${colors[i]}"></i>≥ ${b}× uniforme</span>`).join("") +
+    `</div><p class="hint" style="margin-top:.5rem">n = ${n} · máximo local ≈ ${(maxDensity/expected).toFixed(1)}× lo esperado bajo distribución uniforme</p>`;
+}
+document.getElementById("btnExportContPng").addEventListener("click", ()=> exportCanvasPng(document.getElementById("contCanvas"), "contorneo.png"));
+["contMethod","contSource"].forEach(id=> document.getElementById(id).addEventListener("change", renderContour));
+
+/* ============================================================
+   8. INVERSION DE ESFUERZOS (Bott/Angelier, fiel a Invers.pas -> calcfluct2)
+   ============================================================ */
+function buildStressTensor(t1,p1,t2,p2,R){
+  let e1 = polCar(t1,p1);
+  let e2raw = polCar(t2,p2);
+  // ortonormalizar: e3 = e1 x e2raw ; e2 = e3 x e1 (Gram-Schmidt simplificado)
+  const norm = v => { const m=Math.sqrt(v[0]**2+v[1]**2+v[2]**2)||1; return [v[0]/m,v[1]/m,v[2]/m]; };
+  const cross = (a,b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+  e1 = norm(e1);
+  let e3 = norm(cross(e1,e2raw));
+  let e2 = norm(cross(e3,e1));
+  const sig = [1, R, 0]; // sigma1, sigma2, sigma3 (forma reducida)
+  const axes = [e1,e2,e3];
+  // T_ij = sum_k sig_k * e_k_i * e_k_j
+  const T = [[0,0,0],[0,0,0],[0,0,0]];
+  for(let k=0;k<3;k++){
+    for(let i=0;i<3;i++) for(let j=0;j<3;j++) T[i][j] += sig[k]*axes[k][i]*axes[k][j];
+  }
+  return T;
+}
+function matVec(T,v){ return [T[0][0]*v[0]+T[0][1]*v[1]+T[0][2]*v[2],
+                               T[1][0]*v[0]+T[1][1]*v[1]+T[1][2]*v[2],
+                               T[2][0]*v[0]+T[2][1]*v[1]+T[2][2]*v[2]]; }
+function dot3(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+function mag3(a){ return Math.sqrt(dot3(a,a)); }
+
+// Réplica de ConvertSense (types.pas): resuelve fallas oblicuas (3=dextral,4=sinistral) según el signo del pitch
+function convertSense(sense, pitchRad){
+  if(sense===3) return pitchRad<0 ? 2 : (pitchRad>0 ? 1 : 0);
+  if(sense===4) return pitchRad<0 ? 1 : (pitchRad>0 ? 2 : 0);
+  return sense;
+}
+function calcFluctuation(T, faults){
+  let fluctuation=0, nev=0, nosense=0, n=0;
+  const rows = [];
+  faults.forEach(r=>{
+    let dip = r.dip===90?89:r.dip;
+    let plunge = r.plunge===0?1:r.plunge;
+    let azimuth = r.azimuth;
+    if(Math.abs(azimuth-r.dipDir-270)<1e-6 || Math.abs(azimuth-r.dipDir+90)<1e-6) azimuth += 0.1;
+    else if(Math.abs(azimuth-r.dipDir+270)<1e-6 || Math.abs(azimuth-r.dipDir-90)<1e-6) azimuth -= 0.1;
+    const pitch = Math.atan(Math.tan(D2R*(azimuth-r.dipDir)-Math.PI/2)/Math.cos(D2R*plunge));
+    n++;
+    let sense = r.sense;
+    let S;
+    if(sense===0){ nosense++; S=1; }
+    else{
+      const cs = convertSense(sense, pitch);
+      S = cs===1 ? 1 : (cs===2 ? -1 : 1);
+    }
+    const f = polCar(r.dipDir, dip-90);
+    let s = polCar(azimuth, plunge);
+    s = [-S*s[0], -S*s[1], -S*s[2]];
+    const o = [ f[1]*s[2]-f[2]*s[1], f[2]*s[0]-f[0]*s[2], f[0]*s[1]-f[1]*s[0] ];
+    const sv = matVec(T,f);
+    const magSv = mag3(sv)||1e-9;
+    let divergence = Math.acos(Math.max(-1,Math.min(1, dot3(o,sv)/magSv)));
+    divergence = divergence < Math.PI/2 ? (Math.PI/2 - divergence) : (divergence - Math.PI/2);
+    const shear = Math.acos(Math.max(-1,Math.min(1, dot3(s,sv)/magSv)));
+    let contrib = 0;
+    if(shear < Math.PI/2) nev++;
+    else { contrib = divergence*R2D; fluctuation += contrib; }
+    rows.push({label:r.label||("#"+r.id), pitchDeg:pitch*R2D, compatible: shear<Math.PI/2, misfitDeg: contrib});
+  });
+  const denom = Math.max(1, n-nosense);
+  fluctuation /= denom;
+  const percentnev = denom>0 ? nev*100/denom : 0;
+  const reverse = percentnev>50 ? 1 : -1;
+  return { fluctuation, percentCompatible: percentnev, reverse, n, nosense, rows };
+}
+function getInversionInputs(){
+  return {
+    t1:Number(document.getElementById("s1t").value), p1:Number(document.getElementById("s1p").value),
+    t2:Number(document.getElementById("s2t").value), p2:Number(document.getElementById("s2p").value),
+    R:Number(document.getElementById("stressRatio").value),
+  };
+}
+function runInversion(){
+  const faults = dataset.filter(r=>r.type==="fault");
+  if(faults.length<3){
+    document.getElementById("inversionResult").innerHTML = `<p class="hint">Se necesitan al menos 3 medidas de tipo Falla con sentido definido.</p>`;
+    document.getElementById("inversionTable").innerHTML = "";
+    return;
+  }
+  const {t1,p1,t2,p2,R} = getInversionInputs();
+  const T = buildStressTensor(t1,p1,t2,p2,R);
+  const res = calcFluctuation(T, faults);
+  document.getElementById("inversionResult").innerHTML = `
+    <div class="stat"><span>Fallas usadas</span><b>${res.n} (${res.nosense} sin sentido definido)</b></div>
+    <div class="stat"><span>Fluctuación media (desajuste)</span><b>${res.fluctuation.toFixed(1)}°</b></div>
+    <div class="stat"><span>% compatibles con el tensor</span><b>${res.percentCompatible.toFixed(0)}%</b></div>
+    <div class="stat"><span>Convención de signo</span><b>${res.reverse===1?"Mayoría compatible con la convención invertida del tensor (normal en Angelier) — resultado válido":"Mayoría compatible con la convención directa del tensor"}</b></div>`;
+  document.getElementById("inversionTable").innerHTML = `
+    <table><thead><tr><th>Falla</th><th>Pitch°</th><th>Compatible</th><th>Desajuste°</th></tr></thead>
+    <tbody>${res.rows.map(r=>`<tr><td>${r.label}</td><td>${r.pitchDeg.toFixed(1)}</td><td>${r.compatible?"✔":"✘"}</td><td>${r.misfitDeg.toFixed(1)}</td></tr>`).join("")}</tbody></table>`;
+}
+document.getElementById("btnCalcInversion").addEventListener("click", runInversion);
+document.getElementById("btnAutoFitInversion").addEventListener("click", ()=>{
+  const faults = dataset.filter(r=>r.type==="fault");
+  if(faults.length<3){ runInversion(); return; }
+  let best=null;
+  for(let t1=0;t1<360;t1+=15){
+    for(let p1=0;p1<=90;p1+=15){
+      for(let t2=0;t2<360;t2+=30){
+        for(const R of [0,0.25,0.5,0.75,1]){
+          const p2v = 0; // segundo eje aproximadamente horizontal como punto de partida de la búsqueda
+          const T = buildStressTensor(t1,p1,t2,p2v,R);
+          const res = calcFluctuation(T, faults);
+          if(!best || res.fluctuation < best.res.fluctuation) best = {t1,p1,t2,p2:p2v,R,res};
+        }
+      }
+    }
+  }
+  if(best){
+    document.getElementById("s1t").value = best.t1;
+    document.getElementById("s1p").value = best.p1;
+    document.getElementById("s2t").value = best.t2;
+    document.getElementById("s2p").value = best.p2;
+    document.getElementById("stressRatio").value = best.R;
+    runInversion();
+  }
+});
+
+/* ============================================================
+   9. BINGHAM (autovectores de matriz de orientacion, Jacobi) + DIEDROS RECTOS (NDA)
+   ============================================================ */
+function orientationMatrix(vecs){
+  const M = [[0,0,0],[0,0,0],[0,0,0]];
+  vecs.forEach(v=>{ for(let i=0;i<3;i++) for(let j=0;j<3;j++) M[i][j]+=v[i]*v[j]; });
+  const n = vecs.length||1;
+  for(let i=0;i<3;i++) for(let j=0;j<3;j++) M[i][j]/=n;
+  return M;
+}
+// Algoritmo de Jacobi para autovalores/autovectores de una matriz simetrica 3x3
+function jacobiEigen(Min){
+  const A = Min.map(r=>r.slice());
+  let V = [[1,0,0],[0,1,0],[0,0,1]];
+  for(let iter=0; iter<60; iter++){
+    let off = Math.abs(A[0][1])+Math.abs(A[0][2])+Math.abs(A[1][2]);
+    if(off < 1e-12) break;
+    for(const [p,q] of [[0,1],[0,2],[1,2]]){
+      if(Math.abs(A[p][q]) < 1e-14) continue;
+      const theta = (A[q][q]-A[p][p])/(2*A[p][q]);
+      const t = Math.sign(theta||1)/(Math.abs(theta)+Math.sqrt(theta*theta+1));
+      const c = 1/Math.sqrt(t*t+1), s = t*c;
+      const App=A[p][p], Aqq=A[q][q], Apq=A[p][q];
+      A[p][p] = c*c*App - 2*s*c*Apq + s*s*Aqq;
+      A[q][q] = s*s*App + 2*s*c*Apq + c*c*Aqq;
+      A[p][q] = A[q][p] = 0;
+      for(let k=0;k<3;k++){
+        if(k!==p && k!==q){
+          const Akp=A[k][p], Akq=A[k][q];
+          A[k][p]=A[p][k]=c*Akp - s*Akq;
+          A[k][q]=A[q][k]=s*Akp + c*Akq;
+        }
+      }
+      for(let k=0;k<3;k++){
+        const Vkp=V[k][p], Vkq=V[k][q];
+        V[k][p] = c*Vkp - s*Vkq;
+        V[k][q] = s*Vkp + c*Vkq;
+      }
+    }
+  }
+  const vals = [A[0][0],A[1][1],A[2][2]];
+  const order = [0,1,2].sort((a,b)=>vals[a]-vals[b]); // ascendente: min, int, max
+  return order.map(i=>({ value: vals[i], vector: [V[0][i],V[1][i],V[2][i]] }));
+}
+function runBingham(){
+  const source = document.getElementById("bghSource").value;
+  const vecs = getUnitVectors(source);
+  const el = document.getElementById("binghamResult");
+  if(vecs.length<3){ el.innerHTML = `<p class="hint">Se necesitan al menos 3 medidas.</p>`; return; }
+  const M = orientationMatrix(vecs);
+  const eig = jacobiEigen(M); // [min, int, max]
+  const rowsHtml = eig.map((e,i)=>{
+    let [t,p] = carPol(e.vector[0], e.vector[1], e.vector[2]);
+    if(e.vector[2] < 0){ t=(t+180)%360; }
+    const label = ["Mínimo","Intermedio","Máximo"][i];
+    return `<div class="stat"><span>${label} (S${3-i})</span><b>${e.value.toFixed(3)} · ${t.toFixed(1)}° / ${Math.abs(p).toFixed(1)}°</b></div>`;
+  }).join("");
+  const [Smin, Sint, Smax] = eig.map(e=>e.value);
+  let fabric = "indeterminado";
+  if(Smax - Sint > Sint - Smin) fabric = "agrupamiento (cluster) — orientación preferente marcada";
+  else if(Sint - Smin > Smax - Sint) fabric = "guirnalda (girdle) — datos distribuidos en un plano";
+  else fabric = "transicional / cercano a aleatorio";
+  el.innerHTML = `<div class="stat"><span>n</span><b>${vecs.length}</b></div>${rowsHtml}
+    <div class="stat"><span>Tejido (S1 vs S2 vs S3)</span><b>${fabric}</b></div>`;
+}
+document.getElementById("btnCalcBingham").addEventListener("click", runBingham);
+
+// Diedros rectos: para cada falla, plano de falla (normal f) y plano auxiliar (normal f×s) dividen la esfera en 4 diedros.
+// Se evalua compatibilidad de cada punto de una grilla como candidato a eje P (compresion) o T (tension).
+function runDihedra(){
+  const canvas = document.getElementById("dihedraCanvas");
+  const ctx = canvas.getContext("2d");
+  const cx=canvas.width/2, cy=canvas.height/2, R=Math.min(cx,cy)-30;
+  drawNetBase(ctx, cx, cy, R, true);
+  const faults = dataset.filter(r=>r.type==="fault" && r.sense);
+  if(faults.length<1) return;
+  const planes = faults.map(r=>{
+    const f = polCar(r.dipDir, r.dip-90);
+    let s = polCar(r.azimuth, r.plunge);
+    const S = r.sense===2 ? -1 : 1; // normal/dextral/sinistral tratados como +1 de forma simplificada; inversa -1
+    s = [-S*s[0], -S*s[1], -S*s[2]];
+    const aux = [ f[1]*s[2]-f[2]*s[1], f[2]*s[0]-f[0]*s[2], f[0]*s[1]-f[1]*s[0] ];
+    return {f, aux};
+  });
+  const N_GRID = 60;
+  const cellW=(2*R)/N_GRID, cellH=(2*R)/N_GRID;
+  for(let gy=0; gy<N_GRID; gy++){
+    for(let gx=0; gx<N_GRID; gx++){
+      const px = (gx/(N_GRID-1)-0.5)*2*R;
+      const py = (gy/(N_GRID-1)-0.5)*2*R;
+      const rr = Math.sqrt(px*px+py*py);
+      if(rr>R) continue;
+      const rho = rr/R;
+      const plunge = 90 - 2*R2D*Math.asin(rho/SQRT2);
+      const trend = (R2D*Math.atan2(px,-py)+360)%360;
+      const v = polCar(trend, plunge);
+      let scoreP=0;
+      planes.forEach(pl=>{
+        const sf = dot3(v,pl.f), sa = dot3(v,pl.aux);
+        if(sf*sa > 0) scoreP++; else scoreP--;
+      });
+      const frac = scoreP/planes.length; // -1..1 : +1 todo P, -1 todo T
+      if(Math.abs(frac) < 0.15) continue; // zona ambigua, no pintar
+      ctx.fillStyle = frac>0 ? css('--accent') : css('--accent2');
+      ctx.globalAlpha = Math.min(0.85, Math.abs(frac));
+      ctx.fillRect(cx+px-cellW/2, cy+py-cellH/2, cellW+0.6, cellH+0.6);
+    }
+  }
+  ctx.globalAlpha=1;
+  ctx.strokeStyle = css('--border'); ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,2*Math.PI); ctx.stroke();
+}
+document.getElementById("btnCalcDihedra").addEventListener("click", runDihedra);
+
+/* ============================================================
+   10. ROTACION DE CONJUNTO DE DATOS (rotate.pas, via Angle.Rotate)
+   ============================================================ */
+function rotateMeasurement(r, axisTrend, axisPlunge, angleDeg){
+  const axis = polCar(axisTrend, axisPlunge);
+  const angleRad = angleDeg*D2R;
+  const out = Object.assign({}, r);
+  const kind = kindOf(r.type);
+  // los planos (incl. fallas) rotan dipDir/dip; las fallas ademas llevan una linea de estria (azimuth/plunge) que tambien debe rotar
+  if(kind==="plane"){
+    const {trend,plunge} = polePlane(r.dipDir, r.dip);
+    const v = rotateVector(polCar(trend,plunge), axis, angleRad);
+    let [t,p] = carPol(v[0],v[1],v[2]);
+    if(v[2] < 0){ t=(t+180)%360; p=-p; }
+    p = Math.abs(p);
+    out.dipDir = (t+180)%360; // trend del polo -> dipDir del plano
+    out.dip = 90-p;
+  }
+  if(kind==="line" || r.type==="fault"){
+    const v = rotateVector(polCar(r.azimuth,r.plunge), axis, angleRad);
+    let [t,p] = carPol(v[0],v[1],v[2]);
+    if(v[2] < 0){ t=(t+180)%360; p=-p; }
+    out.azimuth = t; out.plunge = Math.abs(p);
+  }
+  return out;
+}
+function computeRotated(){
+  const axisTrend = Number(document.getElementById("rotAxisTrend").value);
+  const axisPlunge = Number(document.getElementById("rotAxisPlunge").value);
+  const angle = Number(document.getElementById("rotAngle").value);
+  return dataset.map(r=>rotateMeasurement(r, axisTrend, axisPlunge, angle));
+}
+function renderRotatePreview(rows){
+  const html = `<table><thead><tr><th>Etiqueta</th><th>Tipo</th><th>DipDir°</th><th>Dip°</th><th>Azimuth°</th><th>Plunge°</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td>${r.label||r.id}</td><td>${r.type}</td><td>${r.dipDir.toFixed(1)}</td><td>${r.dip.toFixed(1)}</td><td>${r.azimuth.toFixed(1)}</td><td>${r.plunge.toFixed(1)}</td></tr>`).join("")}</tbody></table>`;
+  document.getElementById("rotatePreview").innerHTML = html;
+}
+document.getElementById("btnPreviewRotation").addEventListener("click", ()=> renderRotatePreview(computeRotated()));
+document.getElementById("btnApplyRotation").addEventListener("click", ()=>{
+  if(!confirm("Esto sobreescribe las medidas actuales con la versión rotada. ¿Continuar?")) return;
+  dataset = computeRotated();
+  saveToStorage();
+  renderAll();
+});
+
+/* ============================================================
+   11. INICIO
+   ============================================================ */
+function renderAll(){
+  renderEditor(); renderStereonet(); renderRose();
+  renderContour();
+}
+loadFromStorage();
+renderAll();
+</script>
+</body>
+</html>
